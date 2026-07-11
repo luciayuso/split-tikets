@@ -463,11 +463,27 @@
       renderAll();
     }
 
-    function updateItem(itemId, field, value) {
+    function updateItem(itemId, field, value, inputEl = null) {
       const item = state.items.find(i => i.id === itemId);
       if (!item) return;
+
+      // IMPORTANTE:
+      // Antes se llamaba a renderAll() en cada tecla.
+      // Eso reconstruía toda la tabla y el input perdía el foco.
+      // Ahora solo actualizamos el estado y las zonas de totales/resumen.
       item[field] = field === 'qty' || field === 'unitPrice' ? n(value) : value;
-      renderAll();
+
+      // Actualiza visualmente el total de la línea actual sin reconstruir la tabla.
+      if (inputEl && (field === 'qty' || field === 'unitPrice')) {
+        const row = inputEl.closest('tr');
+        if (row) {
+          const totalCell = row.querySelector('[data-line-total]');
+          if (totalCell) totalCell.textContent = money(n(item.qty) * n(item.unitPrice));
+        }
+      }
+
+      renderTotals();
+      renderSummary();
     }
 
     function removeItem(itemId) {
@@ -537,10 +553,10 @@
         const lineTotal = n(item.qty) * n(item.unitPrice);
         const assignments = state.people.map(p => `<button class="person-btn ${item.assignedTo.includes(p) ? 'active' : ''}" onclick="toggleAssignment('${item.id}', '${escapeAttr(p)}')">${escapeHtml(p)}</button>`).join('');
         return `<tr>
-          <td><input value="${escapeAttr(item.name)}" oninput="updateItem('${item.id}', 'name', this.value)" /></td>
-          <td class="number"><input type="number" min="0" step="1" value="${item.qty}" oninput="updateItem('${item.id}', 'qty', this.value)" /></td>
-          <td class="number"><input type="number" min="0" step="0.01" value="${item.unitPrice}" oninput="updateItem('${item.id}', 'unitPrice', this.value)" /></td>
-          <td class="number"><strong>${money(lineTotal)}</strong></td>
+          <td><input value="${escapeAttr(item.name)}" oninput="updateItem('${item.id}', 'name', this.value, this)" /></td>
+          <td class="number"><input type="number" min="0" step="1" value="${item.qty}" oninput="updateItem('${item.id}', 'qty', this.value, this)" /></td>
+          <td class="number"><input type="number" min="0" step="0.01" value="${item.unitPrice}" oninput="updateItem('${item.id}', 'unitPrice', this.value, this)" /></td>
+          <td class="number"><strong data-line-total>${money(lineTotal)}</strong></td>
           <td><div class="assignments">${assignments}<button class="person-btn" onclick="assignAll('${item.id}')">Todos</button></div></td>
           <td class="no-print"><button class="danger" onclick="removeItem('${item.id}')">Eliminar</button></td>
         </tr>`;
