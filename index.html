@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ticket Splitter OCR</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --primary: #f97316;
+      --primary-dark: #ea580c;
+      --primary-soft: #ffedd5;
+      --green: #16a34a;
+      --red: #dc2626;
+      --blue: #2563eb;
+      --shadow: 0 20px 45px rgba(15, 23, 42, .08);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background: radial-gradient(circle at top left, #fff7ed 0, transparent 35%), var(--bg);
+      color: var(--text);
+    }
+    .app { max-width: 1320px; margin: 0 auto; padding: 28px; }
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 22px;
+      align-items: flex-start;
+      margin-bottom: 22px;
+    }
+    .eyebrow { color: var(--primary-dark); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+    h1 { margin: 8px 0 8px; font-size: clamp(28px, 4vw, 44px); line-height: 1.05; }
+    .subtitle { max-width: 830px; color: var(--muted); font-size: 16px; line-height: 1.5; }
+    .badge {
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.8);
+      border-radius: 999px;
+      padding: 9px 13px;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .grid { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
+    .card {
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(9px);
+      border: 1px solid rgba(229,231,235,.8);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+    .card h2 { margin: 0 0 14px; display: flex; align-items: center; gap: 8px; font-size: 18px; }
+    .stack { display: flex; flex-direction: column; gap: 14px; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    label.small { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 11px;
+      font: inherit;
+      background: white;
+      outline: none;
+    }
+    input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+    textarea { min-height: 150px; resize: vertical; }
+    button {
+      border: 0;
+      background: var(--primary);
+      color: white;
+      padding: 10px 13px;
+      border-radius: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: .18s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+    }
+    button:hover { background: var(--primary-dark); transform: translateY(-1px); }
+    button.secondary { background: #111827; }
+    button.secondary:hover { background: #030712; }
+    button.ghost { background: white; color: var(--text); border: 1px solid var(--border); }
+    button.ghost:hover { background: #f9fafb; }
+    button.danger { background: #fee2e2; color: var(--red); border: 1px solid #fecaca; }
+    button.danger:hover { background: #fecaca; }
+    button.green { background: var(--green); }
+    button.blue { background: var(--blue); }
+    button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+    .upload {
+      border: 2px dashed #fdba74;
+      border-radius: var(--radius);
+      padding: 16px;
+      background: #fff7ed;
+      text-align: center;
+      cursor: pointer;
+      min-height: 180px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+    .upload img { max-width: 100%; max-height: 460px; border-radius: 14px; object-fit: contain; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .people-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: #f3f4f6;
+      border: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .pill button { padding: 0; width: 18px; height: 18px; border-radius: 999px; background: transparent; color: var(--muted); }
+    .pill button:hover { color: var(--red); background: #fee2e2; transform: none; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+    .tab { background: white; color: var(--text); border: 1px solid var(--border); }
+    .tab.active { background: #111827; color: white; border-color: #111827; }
+    .table-wrap { width: 100%; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); background: white; }
+    table { width: 100%; border-collapse: collapse; min-width: 920px; }
+    th, td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 14px; }
+    th { background: #f9fafb; text-align: left; color: #4b5563; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+    td.number, th.number { text-align: right; }
+    tr:hover td { background: #fff7ed; }
+    .assignments { display: flex; flex-wrap: wrap; gap: 6px; max-width: 330px; }
+    .person-btn {
+      background: white;
+      color: #4b5563;
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .person-btn.active { background: var(--primary-soft); color: #c2410c; border-color: #fb923c; }
+    .person-btn:hover { transform: none; background: #f9fafb; }
+    .person-btn.active:hover { background: #fed7aa; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+    .summary-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 14px; }
+    .summary-card strong { display: block; font-size: 24px; margin-top: 6px; color: var(--primary-dark); }
+    .total-card { background: #111827; color: white; border-color: #111827; }
+    .total-card strong { color: white; }
+    .progress { height: 10px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
+    .progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .2s ease; }
+    .raw-box { display: none; }
+    .raw-box.show { display: block; }
+    .empty { padding: 28px !important; text-align: center; color: var(--muted); }
+    .mini { font-size: 12px; color: var(--muted); }
+    .two-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } .hero { flex-direction: column; } .two-cols { grid-template-columns: 1fr; } }
+    @media print { .no-print { display: none !important; } body { background: white; } .card { box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">Ticket Splitter OCR</div>
+        <h1>Sube un ticket, detecta artículos y reparte el pago</h1>
+        <p class="subtitle">Aplicación local en un único HTML. No usa base de datos: los datos viven solo en memoria y se eliminan al refrescar la página. Incluye OCR con Tesseract.js, edición manual y exportación a CSV, Excel, JSON y PDF.</p>
+      </div>
+      <div class="badge">Sin backend · Sin base de datos · Datos temporales</div>
+    </header>
+
+    <div class="grid">
+      <aside class="stack">
+        <section class="card">
+          <h2>📸 1. Imagen del ticket</h2>
+          <label class="upload" for="ticketFile" id="uploadBox">
+            <input id="ticketFile" type="file" accept="image/*" hidden />
+            <div id="uploadPlaceholder">
+              <div style="font-size:42px">🧾</div>
+              <strong>Haz clic para subir una imagen</strong>
+              <p class="hint">JPG, PNG o foto desde el móvil.</p>
+            </div>
+            <img id="preview" alt="Vista previa del ticket" style="display:none;" />
+          </label>
+          <div class="row no-print" style="margin-top:12px">
+            <button id="btnOcr" class="green" disabled>Leer ticket con OCR</button>
+            <button class="ghost" onclick="loadDemo()">Demo</button>
+          </div>
+          <div class="progress" style="margin-top:12px"><div id="progressBar"></div></div>
+          <p id="ocrStatus" class="hint">Carga una imagen para activar el OCR.</p>
+          <button class="ghost no-print" onclick="toggleRaw()" style="margin-top:8px;width:100%">Ver / ocultar texto OCR</button>
+          <div class="raw-box" id="rawBox" style="margin-top:10px">
+            <label class="small">Texto bruto detectado</label>
+            <textarea id="rawText" placeholder="Aquí aparecerá el texto OCR. También puedes pegar texto manualmente y pulsar 'Parsear texto'."></textarea>
+            <button class="blue no-print" onclick="parseRawText()" style="margin-top:8px;width:100%">Parsear texto</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>👥 2. Personas</h2>
+          <div class="row no-print">
+            <input id="personName" placeholder="Nombre" onkeydown="if(event.key==='Enter') addPerson()" />
+            <button onclick="addPerson()">Añadir</button>
+          </div>
+          <div id="peopleList" class="people-list" style="margin-top:12px"></div>
+          <p class="hint">Puedes asignar cada artículo a una o varias personas. Si lo asignas a varias, el coste se divide entre ellas.</p>
+        </section>
+
+        <section class="card">
+          <h2>⚙️ 3. Ajustes de reparto</h2>
+          <div class="two-cols">
+            <div>
+              <label class="small">Impuestos / servicio</label>
+              <input id="tax" type="number" step="0.01" value="0" oninput="renderAll()" />
+            </div>
+            <div>
+              <label class="small">Propina</label>
+              <input id="tip" type="number" step="0.01" value="0" oninput="renderAll()" />
+            </div>
+          </div>
+          <div style="margin-top:10px">
+            <label class="small">Cómo repartir impuestos y propina</label>
+            <select id="extraMode" onchange="renderAll()">
+              <option value="proportional">Proporcional a lo consumido</option>
+              <option value="equal">A partes iguales entre personas con consumo</option>
+            </select>
+          </div>
+        </section>
+      </aside>
+
+      <main class="stack">
+        <section class="card">
+          <div class="tabs no-print">
+            <button class="tab active" onclick="setTab(event, 'itemsPanel')">Artículos</button>
+            <button class="tab" onclick="setTab(event, 'summaryPanel')">Resumen</button>
+            <button class="tab" onclick="setTab(event, 'exportPanel')">Exportar</button>
+          </div>
+
+          <div id="itemsPanel">
+            <div class="row" style="justify-content:space-between;margin-bottom:12px">
+              <h2 style="margin:0">🛒 Artículos detectados</h2>
+              <div class="row no-print">
+                <button class="ghost" onclick="addItem()">+ Añadir línea</button>
+                <button class="danger" onclick="clearItems()">Limpiar artículos</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Artículo</th>
+                    <th class="number">Cantidad</th>
+                    <th class="number">Precio ud.</th>
+                    <th class="number">Total línea</th>
+                    <th>Asignado a</th>
+                    <th class="no-print"></th>
+                  </tr>
+                </thead>
+                <tbody id="itemsBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="summaryPanel" style="display:none">
+            <h2>🧮 Resumen por persona</h2>
+            <div id="summaryGrid" class="summary-grid"></div>
+            <div style="margin-top:14px" class="table-wrap">
+              <table>
+                <thead><tr><th>Persona</th><th class="number">Consumo</th><th class="number">Extras</th><th class="number">Total a pagar</th></tr></thead>
+                <tbody id="summaryBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="exportPanel" style="display:none">
+            <h2>📤 Exportar resultado</h2>
+            <p class="hint">Exporta el estado actual. El PDF genera un resumen imprimible. Excel y CSV incluyen detalle de artículos y resumen por persona.</p>
+            <div class="row no-print">
+              <button onclick="exportCSV()">Exportar CSV</button>
+              <button onclick="exportExcel()">Exportar Excel</button>
+              <button onclick="exportJSON()">Exportar JSON</button>
+              <button onclick="exportPDF()">Exportar PDF</button>
+              <button class="ghost" onclick="window.print()">Imprimir</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>💶 Totales</h2>
+          <div id="totalsGrid" class="summary-grid"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      imageFile: null,
+      people: ['Lucía', 'Carlos', 'Ivan'],
+      items: [],
+      rawText: ''
+    };
+
+    const euro = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+    const id = () => crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
+    const n = v => Number(String(v ?? '').replace(',', '.')) || 0;
+    const money = v => euro.format(n(v));
+
+    document.getElementById('ticketFile').addEventListener('change', event => {
+      const file = event.target.files[0];
+      if (!file) return;
+      state.imageFile = file;
+      const url = URL.createObjectURL(file);
+      document.getElementById('preview').src = url;
+      document.getElementById('preview').style.display = 'block';
+      document.getElementById('uploadPlaceholder').style.display = 'none';
+      document.getElementById('btnOcr').disabled = false;
+      setStatus('Imagen cargada. Pulsa "Leer ticket con OCR".', 0);
+    });
+
+    document.getElementById('btnOcr').addEventListener('click', runOCR);
+
+    async function runOCR() {
+      if (!state.imageFile) return;
+      setStatus('Iniciando OCR...', 2);
+      document.getElementById('btnOcr').disabled = true;
+      try {
+        const result = await Tesseract.recognize(state.imageFile, 'spa+eng', {
+          logger: m => {
+            if (m.status) {
+              const pct = m.progress ? Math.round(m.progress * 100) : 0;
+              setStatus(`${m.status} ${pct ? pct + '%' : ''}`, pct);
+            }
+          }
+        });
+        state.rawText = result.data.text || '';
+        document.getElementById('rawText').value = state.rawText;
+        parseTextToItems(state.rawText);
+        setStatus('OCR finalizado. Revisa y corrige las líneas detectadas si hace falta.', 100);
+      } catch (err) {
+        console.error(err);
+        setStatus('No se pudo ejecutar el OCR. Puedes pegar el texto manualmente y parsearlo.', 0);
+        alert('Error OCR: ' + err.message);
+      } finally {
+        document.getElementById('btnOcr').disabled = false;
+      }
+    }
+
+    function setStatus(text, pct) {
+      document.getElementById('ocrStatus').textContent = text;
+      document.getElementById('progressBar').style.width = Math.max(0, Math.min(100, pct || 0)) + '%';
+    }
+
+    function toggleRaw() {
+      document.getElementById('rawBox').classList.toggle('show');
+    }
+
+    function parseRawText() {
+      const text = document.getElementById('rawText').value;
+      state.rawText = text;
+      parseTextToItems(text);
+    }
+
+    function parseTextToItems(text) {
+      const lines = text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+      const parsed = [];
+      let detectedTax = null;
+      let detectedTotal = null;
+
+      for (const line of lines) {
+        const normalized = line.replace(/\s+/g, ' ');
+        const lower = normalized.toLowerCase();
+        const amountMatch = normalized.match(/(-?\d+[,.]\d{2}|-?\d+)\s*(€|eur)?\s*$/i);
+        if (!amountMatch) continue;
+
+        const amount = n(amountMatch[1]);
+        if (/\b(iva|tax|impuesto|servicio)\b/i.test(lower)) {
+          detectedTax = amount;
+          continue;
+        }
+        if (/\b(total|importe|amount due|pagado)\b/i.test(lower)) {
+          detectedTotal = amount;
+          continue;
+        }
+        if (/\b(subtotal|cambio|tarjeta|visa|mastercard|efectivo|cash|fecha|mesa|ticket|factura|nif|cif)\b/i.test(lower)) {
+          continue;
+        }
+
+        let namePart = normalized.slice(0, normalized.lastIndexOf(amountMatch[1])).trim();
+        namePart = namePart.replace(/[€:=]+$/g, '').trim();
+        if (!namePart || namePart.length < 2) continue;
+
+        let qty = 1;
+        let unitPrice = amount;
+        const qtyPatterns = [
+          /^(\d+)\s*[xX]\s+(.+)$/,
+          /^(.+?)\s+[xX]\s*(\d+)$/,
+          /^(\d+)\s+(.+)$/
+        ];
+        for (const pattern of qtyPatterns) {
+          const m = namePart.match(pattern);
+          if (m) {
+            if (pattern === qtyPatterns[0]) { qty = n(m[1]); namePart = m[2].trim(); }
+            else if (pattern === qtyPatterns[1]) { qty = n(m[2]); namePart = m[1].trim(); }
+            else if (Number(m[1]) > 1 && m[2].length > 2) { qty = n(m[1]); namePart = m[2].trim(); }
+            break;
+          }
+        }
+        if (qty > 0) unitPrice = amount / qty;
+        parsed.push({ id: id(), name: cleanArticleName(namePart), qty, unitPrice: round2(unitPrice), assignedTo: [] });
+      }
+
+      if (parsed.length) state.items = parsed;
+      if (detectedTax !== null) document.getElementById('tax').value = detectedTax;
+      if (detectedTotal !== null && detectedTax === null) {
+        const subtotal = parsed.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+        const diff = round2(detectedTotal - subtotal);
+        if (diff > 0) document.getElementById('tax').value = diff;
+      }
+      renderAll();
+    }
+
+    function cleanArticleName(name) {
+      return name.replace(/^[*\-–•\s]+/, '').replace(/\s{2,}/g, ' ').trim();
+    }
+
+    function round2(v) { return Math.round((n(v) + Number.EPSILON) * 100) / 100; }
+
+    function addPerson() {
+      const input = document.getElementById('personName');
+      const value = input.value.trim();
+      if (!value || state.people.includes(value)) return;
+      state.people.push(value);
+      input.value = '';
+      renderAll();
+    }
+
+    function removePerson(person) {
+      state.people = state.people.filter(p => p !== person);
+      state.items.forEach(item => item.assignedTo = item.assignedTo.filter(p => p !== person));
+      renderAll();
+    }
+
+    function addItem(data = {}) {
+      state.items.push({
+        id: id(),
+        name: data.name || 'Nuevo artículo',
+        qty: data.qty ?? 1,
+        unitPrice: data.unitPrice ?? 0,
+        assignedTo: data.assignedTo || []
+      });
+      renderAll();
+    }
+
+    function clearItems() {
+      state.items = [];
+      renderAll();
+    }
+
+    function updateItem(itemId, field, value) {
+      const item = state.items.find(i => i.id === itemId);
+      if (!item) return;
+      item[field] = field === 'qty' || field === 'unitPrice' ? n(value) : value;
+      renderAll();
+    }
+
+    function removeItem(itemId) {
+      state.items = state.items.filter(i => i.id !== itemId);
+      renderAll();
+    }
+
+    function toggleAssignment(itemId, person) {
+      const item = state.items.find(i => i.id === itemId);
+      if (!item) return;
+      if (item.assignedTo.includes(person)) item.assignedTo = item.assignedTo.filter(p => p !== person);
+      else item.assignedTo.push(person);
+      renderAll();
+    }
+
+    function assignAll(itemId) {
+      const item = state.items.find(i => i.id === itemId);
+      if (!item) return;
+      item.assignedTo = [...state.people];
+      renderAll();
+    }
+
+    function getCalculations() {
+      const subtotal = state.items.reduce((s, i) => s + n(i.qty) * n(i.unitPrice), 0);
+      const tax = n(document.getElementById('tax').value);
+      const tip = n(document.getElementById('tip').value);
+      const extras = tax + tip;
+      const mode = document.getElementById('extraMode').value;
+      const consumption = Object.fromEntries(state.people.map(p => [p, 0]));
+      const extraByPerson = Object.fromEntries(state.people.map(p => [p, 0]));
+      const total = Object.fromEntries(state.people.map(p => [p, 0]));
+
+      for (const item of state.items) {
+        const assigned = item.assignedTo || [];
+        if (!assigned.length) continue;
+        const lineTotal = n(item.qty) * n(item.unitPrice);
+        const part = lineTotal / assigned.length;
+        assigned.forEach(p => consumption[p] = (consumption[p] || 0) + part);
+      }
+
+      const peopleWithConsumption = state.people.filter(p => consumption[p] > 0);
+      if (extras > 0 && peopleWithConsumption.length) {
+        if (mode === 'equal') {
+          const part = extras / peopleWithConsumption.length;
+          peopleWithConsumption.forEach(p => extraByPerson[p] = part);
+        } else if (subtotal > 0) {
+          peopleWithConsumption.forEach(p => extraByPerson[p] = extras * (consumption[p] / subtotal));
+        }
+      }
+
+      state.people.forEach(p => total[p] = consumption[p] + extraByPerson[p]);
+      return { subtotal, tax, tip, extras, grandTotal: subtotal + extras, consumption, extraByPerson, total };
+    }
+
+    function renderPeople() {
+      const box = document.getElementById('peopleList');
+      box.innerHTML = state.people.map(p => `<span class="pill">${escapeHtml(p)} <button title="Eliminar" onclick="removePerson('${escapeAttr(p)}')">×</button></span>`).join('') || '<span class="mini">Añade al menos una persona.</span>';
+    }
+
+    function renderItems() {
+      const body = document.getElementById('itemsBody');
+      if (!state.items.length) {
+        body.innerHTML = '<tr><td class="empty" colspan="6">No hay artículos. Usa el OCR, la demo o añade líneas manualmente.</td></tr>';
+        return;
+      }
+      body.innerHTML = state.items.map(item => {
+        const lineTotal = n(item.qty) * n(item.unitPrice);
+        const assignments = state.people.map(p => `<button class="person-btn ${item.assignedTo.includes(p) ? 'active' : ''}" onclick="toggleAssignment('${item.id}', '${escapeAttr(p)}')">${escapeHtml(p)}</button>`).join('');
+        return `<tr>
+          <td><input value="${escapeAttr(item.name)}" oninput="updateItem('${item.id}', 'name', this.value)" /></td>
+          <td class="number"><input type="number" min="0" step="1" value="${item.qty}" oninput="updateItem('${item.id}', 'qty', this.value)" /></td>
+          <td class="number"><input type="number" min="0" step="0.01" value="${item.unitPrice}" oninput="updateItem('${item.id}', 'unitPrice', this.value)" /></td>
+          <td class="number"><strong>${money(lineTotal)}</strong></td>
+          <td><div class="assignments">${assignments}<button class="person-btn" onclick="assignAll('${item.id}')">Todos</button></div></td>
+          <td class="no-print"><button class="danger" onclick="removeItem('${item.id}')">Eliminar</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    function renderTotals() {
+      const calc = getCalculations();
+      const grid = document.getElementById('totalsGrid');
+      const personCards = state.people.map(p => `<div class="summary-card"><span>${escapeHtml(p)}</span><strong>${money(calc.total[p])}</strong><div class="mini">Consumo ${money(calc.consumption[p])} · Extras ${money(calc.extraByPerson[p])}</div></div>`).join('');
+      grid.innerHTML = personCards + `<div class="summary-card total-card"><span>Total ticket</span><strong>${money(calc.grandTotal)}</strong><div class="mini">Subtotal ${money(calc.subtotal)} · Extras ${money(calc.extras)}</div></div>`;
+    }
+
+    function renderSummary() {
+      const calc = getCalculations();
+      const grid = document.getElementById('summaryGrid');
+      grid.innerHTML = state.people.map(p => `<div class="summary-card"><span>${escapeHtml(p)}</span><strong>${money(calc.total[p])}</strong></div>`).join('') || '<p class="hint">Añade personas para ver el resumen.</p>';
+      document.getElementById('summaryBody').innerHTML = state.people.map(p => `<tr><td>${escapeHtml(p)}</td><td class="number">${money(calc.consumption[p])}</td><td class="number">${money(calc.extraByPerson[p])}</td><td class="number"><strong>${money(calc.total[p])}</strong></td></tr>`).join('');
+    }
+
+    function renderAll() {
+      renderPeople();
+      renderItems();
+      renderTotals();
+      renderSummary();
+    }
+
+    function exportRows() {
+      const calc = getCalculations();
+      const itemRows = state.items.map(item => ({
+        Tipo: 'Articulo',
+        Articulo: item.name,
+        Cantidad: item.qty,
+        PrecioUnitario: round2(item.unitPrice),
+        TotalLinea: round2(item.qty * item.unitPrice),
+        AsignadoA: item.assignedTo.join(', ')
+      }));
+      const summaryRows = state.people.map(p => ({
+        Tipo: 'Resumen',
+        Persona: p,
+        Consumo: round2(calc.consumption[p]),
+        Extras: round2(calc.extraByPerson[p]),
+        TotalAPagar: round2(calc.total[p])
+      }));
+      return { itemRows, summaryRows, calc };
+    }
+
+    function exportCSV() {
+      const { itemRows, summaryRows } = exportRows();
+      const rows = [...itemRows, {}, ...summaryRows];
+      downloadText('ticket-splitter.csv', toCSV(rows), 'text/csv;charset=utf-8');
+    }
+
+    function exportJSON() {
+      const { calc } = exportRows();
+      const payload = { generatedAt: new Date().toISOString(), people: state.people, items: state.items, totals: calc, rawText: state.rawText };
+      downloadText('ticket-splitter.json', JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
+    }
+
+    function exportExcel() {
+      const { itemRows, summaryRows } = exportRows();
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(itemRows), 'Articulos');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Resumen');
+      XLSX.writeFile(wb, 'ticket-splitter.xlsx');
+    }
+
+    function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      const calc = getCalculations();
+      const doc = new jsPDF();
+      let y = 14;
+      doc.setFontSize(18);
+      doc.text('Resumen de reparto de ticket', 14, y);
+      y += 10;
+      doc.setFontSize(11);
+      doc.text(`Fecha: ${new Date().toLocaleString('es-ES')}`, 14, y);
+      y += 8;
+      doc.text(`Subtotal: ${money(calc.subtotal)} | Extras: ${money(calc.extras)} | Total: ${money(calc.grandTotal)}`, 14, y);
+      y += 12;
+      doc.setFontSize(13);
+      doc.text('Totales por persona', 14, y);
+      y += 8;
+      doc.setFontSize(11);
+      state.people.forEach(p => {
+        doc.text(`${p}: ${money(calc.total[p])} (consumo ${money(calc.consumption[p])}, extras ${money(calc.extraByPerson[p])})`, 14, y);
+        y += 7;
+        if (y > 280) { doc.addPage(); y = 14; }
+      });
+      y += 6;
+      doc.setFontSize(13);
+      doc.text('Detalle de articulos', 14, y);
+      y += 8;
+      doc.setFontSize(10);
+      state.items.forEach(item => {
+        const txt = `${item.name} | ${item.qty} x ${money(item.unitPrice)} = ${money(item.qty * item.unitPrice)} | ${item.assignedTo.join(', ') || 'Sin asignar'}`;
+        const split = doc.splitTextToSize(txt, 180);
+        doc.text(split, 14, y);
+        y += split.length * 5 + 2;
+        if (y > 280) { doc.addPage(); y = 14; }
+      });
+      doc.save('ticket-splitter.pdf');
+    }
+
+    function toCSV(rows) {
+      const headers = [...new Set(rows.flatMap(r => Object.keys(r)))];
+      const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+      return [headers.join(';'), ...rows.map(r => headers.map(h => esc(r[h])).join(';'))].join('\n');
+    }
+
+    function downloadText(filename, text, type) {
+      const blob = new Blob([text], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function setTab(event, panelId) {
+      document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      ['itemsPanel', 'summaryPanel', 'exportPanel'].forEach(id => document.getElementById(id).style.display = id === panelId ? 'block' : 'none');
+    }
+
+    function loadDemo() {
+      state.items = [
+        { id: id(), name: 'Café', qty: 2, unitPrice: 2.10, assignedTo: ['Lucía', 'Carlos'] },
+        { id: id(), name: 'Tostada tomate', qty: 1, unitPrice: 4.50, assignedTo: ['Ivan'] },
+        { id: id(), name: 'Agua', qty: 3, unitPrice: 1.40, assignedTo: ['Lucía', 'Carlos', 'Ivan'] },
+        { id: id(), name: 'Tortilla', qty: 1, unitPrice: 6.80, assignedTo: ['Lucía', 'Ivan'] }
+      ];
+      document.getElementById('tax').value = '1.35';
+      document.getElementById('tip').value = '0';
+      renderAll();
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"]/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[s]));
+    }
+    function escapeAttr(str) {
+      return String(str).replace(/[&<>'"]/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[s]));
+    }
+
+    renderAll();
+  </script>
+</body>
+</html>
